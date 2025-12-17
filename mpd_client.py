@@ -156,10 +156,12 @@ def draw_playing_screen(draw):
 
         # タイトル行（16pxフォント）
         y_pos = 0
-        title_width = calc_text_width(title)
+        # 実際のフォント幅を取得
+        bbox = font_16.getbbox(title)
+        title_width = bbox[2] - bbox[0]
 
         if title_width > 128 and status['state'] == 'play':
-            # バウンススクロール（文字幅ベース）
+            # バウンススクロール（実際の文字幅ベース）
             max_scroll = title_width - 128
             if scroll_offset >= max_scroll:
                 scroll_direction = -1
@@ -222,8 +224,8 @@ def draw_playing_screen(draw):
 
         # 左にボリューム
         draw.text((0, y_pos), vol_text, font=font, fill=255)
-        # 右に時刻（時刻は8文字 = 64px、右端から64px = 64pxから開始）
-        draw.text((64, y_pos), local_time, font=font, fill=255)
+        # 右に時刻（右寄せ：128 - 32 = 96pxから開始）
+        draw.text((96, y_pos), local_time, font=font, fill=255)
 
     except Exception as e:
         draw.text((0, 0), "MPD接続エラー", font=font, fill=255)
@@ -466,13 +468,12 @@ def draw_queue_menu(draw):
 def draw_screen():
     """画面を描画"""
     global state, start
-    
-    if state == STATE_OFF:
-        device.hide()
-        return
-    
+
     with canvas(device) as draw:
-        if state == STATE_PLAYING:
+        if state == STATE_OFF:
+            # 空白画面を描画（OLED保護のため完全に消さない）
+            pass
+        elif state == STATE_PLAYING:
             draw_playing_screen(draw)
         elif state == STATE_QUEUE:
             draw_queue_screen(draw)
@@ -560,17 +561,24 @@ def btn3_pressed():
 def joystick_up():
     """ジョイスティック上"""
     global state, menu_cursor, library_cursor, queue_cursor, queue_menu_cursor, start
-    
+
     if not debounce(JS_U_PIN):
         return
-    
+
     start = time.time()
-    
-    # スクリーンセーバーから復帰
+
+    # スクリーンセーバーから復帰（ボリューム上げ）
     if state == STATE_OFF:
         state = STATE_PLAYING
+        try:
+            connect_mpd()
+            status = mpd_client.status()
+            volume = int(status.get('volume', 50))
+            mpd_client.setvol(min(100, volume + 5))
+        except:
+            pass
         return
-    
+
     if state == STATE_PLAYING:
         # ボリューム上げ
         try:
@@ -596,17 +604,24 @@ def joystick_up():
 def joystick_down():
     """ジョイスティック下"""
     global state, menu_cursor, library_cursor, queue_cursor, queue_menu_cursor, start
-    
+
     if not debounce(JS_D_PIN):
         return
-    
+
     start = time.time()
-    
-    # スクリーンセーバーから復帰
+
+    # スクリーンセーバーから復帰（ボリューム下げ）
     if state == STATE_OFF:
         state = STATE_PLAYING
+        try:
+            connect_mpd()
+            status = mpd_client.status()
+            volume = int(status.get('volume', 50))
+            mpd_client.setvol(max(0, volume - 5))
+        except:
+            pass
         return
-    
+
     if state == STATE_PLAYING:
         # ボリューム下げ
         try:
@@ -635,17 +650,22 @@ def joystick_down():
 def joystick_left():
     """ジョイスティック左"""
     global state, start
-    
+
     if not debounce(JS_L_PIN):
         return
-    
+
     start = time.time()
-    
-    # スクリーンセーバーから復帰
+
+    # スクリーンセーバーから復帰（前の曲）
     if state == STATE_OFF:
         state = STATE_PLAYING
+        try:
+            connect_mpd()
+            mpd_client.previous()
+        except:
+            pass
         return
-    
+
     if state == STATE_PLAYING:
         # 前の曲
         try:
@@ -657,17 +677,22 @@ def joystick_left():
 def joystick_right():
     """ジョイスティック右"""
     global state, start
-    
+
     if not debounce(JS_R_PIN):
         return
-    
+
     start = time.time()
-    
-    # スクリーンセーバーから復帰
+
+    # スクリーンセーバーから復帰（次の曲）
     if state == STATE_OFF:
         state = STATE_PLAYING
+        try:
+            connect_mpd()
+            mpd_client.next()
+        except:
+            pass
         return
-    
+
     if state == STATE_PLAYING:
         # 次の曲
         try:
@@ -679,17 +704,26 @@ def joystick_right():
 def joystick_pressed():
     """ジョイスティック押し込み（決定）"""
     global state, menu_cursor, library_cursor, library_path, library_scroll, queue_cursor, queue_menu_cursor, start
-    
+
     if not debounce(JS_P_PIN):
         return
-    
+
     start = time.time()
-    
-    # スクリーンセーバーから復帰
+
+    # スクリーンセーバーから復帰（再生/一時停止）
     if state == STATE_OFF:
         state = STATE_PLAYING
+        try:
+            connect_mpd()
+            status = mpd_client.status()
+            if status['state'] == 'play':
+                mpd_client.pause(1)
+            else:
+                mpd_client.play()
+        except:
+            pass
         return
-    
+
     if state == STATE_PLAYING:
         # 再生/一時停止
         try:
