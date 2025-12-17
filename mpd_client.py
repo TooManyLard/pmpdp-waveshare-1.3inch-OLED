@@ -45,14 +45,52 @@ STATE_QUEUE_MOVING = 7
 mpd_client = MPDClient()
 mpd_connected = False
 
+# MPD接続設定（Unixソケットを優先、フォールバックでTCP/IP）
+MPD_SOCKET_PATHS = [
+    "/run/mpd/socket",
+    "/var/run/mpd/socket",
+    os.path.expanduser("~/.mpd/socket")
+]
+MPD_HOST = "localhost"
+MPD_PORT = 6600
+
 def connect_mpd():
     global mpd_client, mpd_connected
     try:
-        if not mpd_connected:
-            mpd_client.connect("localhost", 6600)
-            mpd_connected = True
-    except:
+        if mpd_connected:
+            # 接続が生きているか確認
+            try:
+                mpd_client.ping()
+                return
+            except:
+                # 接続が切れている
+                mpd_connected = False
+
+        # 再接続が必要
+        try:
+            mpd_client.disconnect()
+        except:
+            pass
+
+        mpd_client = MPDClient()
+
+        # Unixソケット接続を試行
+        for socket_path in MPD_SOCKET_PATHS:
+            if os.path.exists(socket_path):
+                try:
+                    mpd_client.connect(socket_path)
+                    mpd_connected = True
+                    return
+                except:
+                    pass
+
+        # TCP/IP接続にフォールバック
+        mpd_client.connect(MPD_HOST, MPD_PORT)
+        mpd_connected = True
+
+    except Exception as e:
         mpd_connected = False
+        # エラーを無視（UI側でエラー処理）
 
 def disconnect_mpd():
     global mpd_client, mpd_connected
