@@ -28,6 +28,7 @@ BTN3_PIN = 16
 
 # 定数
 SCREEN_SAVER = 300.0  # 5分でスクリーンセーバー
+CHAR_WIDTH = 16  # 美咲フォントで16文字
 width = 128
 height = 64
 
@@ -66,10 +67,8 @@ def disconnect_mpd():
 # フォント読み込み
 try:
     font = ImageFont.truetype("/usr/share/fonts/truetype/misaki/misaki_gothic.ttf", 8)
-    font_16 = ImageFont.truetype("/usr/share/fonts/truetype/misaki/misaki_gothic.ttf", 16)
 except:
     font = ImageFont.load_default()
-    font_16 = ImageFont.load_default()
 
 # ディスプレイ初期化
 serial = spi(device=0, port=0, bus_speed_hz=8000000, transfer_size=4096, gpio_DC=DC_PIN, gpio_RST=RST_PIN)
@@ -122,112 +121,104 @@ def format_time(seconds):
     except:
         return "00:00"
 
-def calc_text_width(text):
-    """テキストの幅をピクセル単位で計算（全角8px、半角4px）"""
-    width = 0
-    for char in text:
-        # ASCII文字（半角）は4px、それ以外（全角）は8px
-        if ord(char) < 128:
-            width += 4
-        else:
-            width += 8
-    return width
+def truncate_text(text, max_len):
+    """テキストを指定文字数で切り詰め"""
+    if len(text) > max_len:
+        return text[:max_len]
+    return text
 
 def draw_playing_screen(draw):
     """再生中画面を描画"""
     global scroll_offset, scroll_direction, last_song
-
+    
     try:
         connect_mpd()
         status = mpd_client.status()
         current = mpd_client.currentsong()
-
+        
         # 曲情報取得
         title = current.get('title', 'Unknown')
         artist = current.get('artist', 'Unknown Artist')
         album = current.get('album', 'Unknown Album')
         track = current.get('track', '')
-
+        
         # 曲が変わったらスクロールリセット
         if current != last_song:
             scroll_offset = 0
             scroll_direction = 1
             last_song = current.copy()
-
-        # タイトル行（16pxフォント）
+        
+        # タイトル行（1行目）
         y_pos = 0
-        title_width = calc_text_width(title)
-
-        if title_width > 128 and status['state'] == 'play':
-            # バウンススクロール（文字幅ベース）
-            max_scroll = title_width - 128
-            if scroll_offset >= max_scroll:
+        if len(title) > CHAR_WIDTH and status['state'] == 'play':
+            # バウンススクロール
+            if scroll_offset >= (len(title) - CHAR_WIDTH) * 8:
                 scroll_direction = -1
             elif scroll_offset <= 0:
                 scroll_direction = 1
-            scroll_offset += scroll_direction * 2
-
+            scroll_offset += scroll_direction * 8
+            
             # スクロール表示
-            img = Image.new('1', (title_width, 16))
+            img = Image.new('1', (len(title) * 8, 8))
             draw_temp = ImageDraw.Draw(img)
-            draw_temp.text((0, 0), title, font=font_16, fill=255)
+            draw_temp.text((0, 0), title, font=font, fill=255)
             draw.bitmap((0 - scroll_offset, y_pos), img)
         else:
-            draw.text((0, y_pos), title, font=font_16, fill=255)
-
-        # アルバム名 - トラック番号（8px下にシフト）
-        y_pos = 16
+            draw.text((0, y_pos), truncate_text(title, CHAR_WIDTH), font=font, fill=255)
+        
+        # アルバム名 - トラック番号（2行目）
+        y_pos += 8
         album_track = album
         if track:
             album_track += f" - {track}"
-        draw.text((0, y_pos), album_track, font=font, fill=255)
-
-        # アーティスト名（更に8px下にシフト）
-        y_pos = 24
-        draw.text((0, y_pos), artist, font=font, fill=255)
-
-        # 16px空ける
-        y_pos += 16
-
+        draw.text((0, y_pos), truncate_text(album_track, CHAR_WIDTH), font=font, fill=255)
+        
+        # アーティスト名（3行目）
+        y_pos += 8
+        draw.text((0, y_pos), truncate_text(artist, CHAR_WIDTH), font=font, fill=255)
+        
+        # 24px空ける
+        y_pos += 32
+        
         # 再生進捗とトラックの長さ（4px空けて）
         elapsed = float(status.get('elapsed', 0))
         duration = float(current.get('duration', 0))
-
+        
         elapsed_str = format_time(elapsed)
         duration_str = format_time(duration)
-
+        
         # 左端に再生進捗
         draw.text((0, y_pos), elapsed_str, font=font, fill=255)
         # 右端にトラックの長さ（108pxから開始、5文字 = 40px）
         draw.text((108, y_pos), duration_str, font=font, fill=255)
-
+        
         # 4px空けて進捗バー
         y_pos += 12
         bar_width = 128
         bar_height = 3
-
+        
         if duration > 0:
             progress = int((elapsed / duration) * bar_width)
             draw.rectangle((0, y_pos, bar_width - 1, y_pos + bar_height - 1), outline=255, fill=0)
             draw.rectangle((0, y_pos, progress, y_pos + bar_height - 1), outline=255, fill=255)
-
+        
         # ボリュームとローカルタイム
-        y_pos += 4
+        y_pos += 7
         volume = status.get('volume', '0')
         vol_text = f"Vol:{volume}%"
-
+        
         # 現在時刻取得
         import datetime
         local_time = datetime.datetime.now().strftime("%H:%M:%S")
-
+        
         # 左にボリューム
         draw.text((0, y_pos), vol_text, font=font, fill=255)
         # 右に時刻（時刻は8文字 = 64px、右端から64px = 64pxから開始）
         draw.text((64, y_pos), local_time, font=font, fill=255)
-
+        
     except Exception as e:
         draw.text((0, 0), "MPD接続エラー", font=font, fill=255)
-        draw.text((0, 8), str(e), font=font, fill=255)
+        draw.text((0, 8), str(e)[:CHAR_WIDTH], font=font, fill=255)
 
 def draw_queue_screen(draw):
     """再生キュー画面を描画"""
@@ -296,9 +287,9 @@ def draw_queue_screen(draw):
                 # カーソル位置は反転表示
                 if idx == queue_cursor:
                     draw.rectangle((0, y_pos, 124, y_pos + 7), outline=255, fill=255)
-                    draw.text((0, y_pos), line_text, font=font, fill=0)
+                    draw.text((0, y_pos), truncate_text(line_text, CHAR_WIDTH - 1), font=font, fill=0)
                 else:
-                    draw.text((0, y_pos), line_text, font=font, fill=255)
+                    draw.text((0, y_pos), truncate_text(line_text, CHAR_WIDTH - 1), font=font, fill=255)
                 
                 y_pos += 8
             
@@ -341,7 +332,7 @@ def draw_library_screen(draw):
         # パス表示
         y_pos = 0
         path_text = "[ライブラリ]/" + "/".join(library_path) if library_path else "[ライブラリ]/"
-        draw.text((0, y_pos), path_text, font=font, fill=255)
+        draw.text((0, y_pos), truncate_text(path_text, CHAR_WIDTH), font=font, fill=255)
         y_pos += 8
         
         # アイテム取得
@@ -401,9 +392,9 @@ def draw_library_screen(draw):
                 # カーソル位置は反転表示
                 if idx == library_cursor:
                     draw.rectangle((0, y_pos, 124, y_pos + 7), outline=255, fill=255)
-                    draw.text((0, y_pos), line_text, font=font, fill=0)
+                    draw.text((0, y_pos), truncate_text(line_text, CHAR_WIDTH - 1), font=font, fill=0)
                 else:
-                    draw.text((0, y_pos), line_text, font=font, fill=255)
+                    draw.text((0, y_pos), truncate_text(line_text, CHAR_WIDTH - 1), font=font, fill=255)
                 
                 y_pos += 8
             
@@ -420,7 +411,7 @@ def draw_library_screen(draw):
     
     except Exception as e:
         draw.text((0, 0), "MPD接続エラー", font=font, fill=255)
-        draw.text((0, 8), str(e), font=font, fill=255)
+        draw.text((0, 8), str(e)[:CHAR_WIDTH], font=font, fill=255)
 
 def draw_system_menu(draw):
     """システムメニューを描画"""
