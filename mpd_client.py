@@ -868,11 +868,8 @@ try:
 
         draw_screen()
 
-        # 更新頻度の最適化：再生中画面は10FPS、それ以外は1秒に1回
-        if state == STATE_PLAYING:
-            time.sleep(0.1)  # 10FPS
-        else:
-            time.sleep(1.0)  # 1秒に1回
+        # 更新頻度の最適化：全画面1秒に1回
+        time.sleep(1.0)
 
 except KeyboardInterrupt:
     print("\nStopped by user")
