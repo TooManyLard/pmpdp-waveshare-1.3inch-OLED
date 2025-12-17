@@ -39,6 +39,7 @@ STATE_MAIN_MENU = 3
 STATE_LIBRARY = 4
 STATE_SYSTEM = 5
 STATE_QUEUE_MENU = 6
+STATE_QUEUE_MOVING = 7
 
 # MPDクライアント初期化
 mpd_client = MPDClient()
@@ -97,6 +98,7 @@ queue_items = []
 queue_cursor = -2  # -2: リピート行, -1: シャッフル行, 0~: キュー項目
 queue_scroll = 0
 queue_menu_cursor = 0
+queue_moving_from = -1  # 移動元のキュー位置（-1は移動モードでない）
 
 def debounce(pin):
     """デバウンス処理"""
@@ -201,7 +203,7 @@ def draw_playing_screen(draw):
 
 def draw_queue_screen(draw):
     """再生キュー画面を描画"""
-    global queue_items, queue_cursor, queue_scroll
+    global queue_items, queue_cursor, queue_scroll, queue_moving_from
     
     try:
         connect_mpd()
@@ -258,11 +260,16 @@ def draw_queue_screen(draw):
                 
                 item = queue_items[idx]
                 title = item.get('title', 'Unknown')
-                
-                # 再生中のトラックに"> "を追加
-                prefix = "> " if item.get('id') == current_song_id else "  "
+
+                # 再生中のトラックに"> "を追加、移動中には"*"を追加
+                if idx == queue_moving_from:
+                    prefix = "* "
+                elif item.get('id') == current_song_id:
+                    prefix = "> "
+                else:
+                    prefix = "  "
                 line_text = prefix + title
-                
+
                 # カーソル位置は反転表示
                 if idx == queue_cursor:
                     draw.rectangle((0, y_pos, 124, y_pos + 7), outline=255, fill=255)
@@ -460,18 +467,22 @@ def draw_screen():
 # ボタンハンドラ
 def btn1_pressed():
     """BTN1: 再生中画面・再生キュー切り替え"""
-    global state, menu_cursor, queue_cursor, start
-    
+    global state, menu_cursor, queue_cursor, queue_moving_from, start
+
     if not debounce(BTN1_PIN):
         return
-    
+
     start = time.time()
-    
+
     # スクリーンセーバーから復帰
     if state == STATE_OFF:
         state = STATE_PLAYING
         return
-    
+
+    # 移動モード中の場合は解除
+    if queue_moving_from >= 0:
+        queue_moving_from = -1
+
     if state == STATE_PLAYING:
         state = STATE_QUEUE
         queue_cursor = -2  # カーソルをリピート行に初期化
@@ -482,47 +493,47 @@ def btn1_pressed():
         menu_cursor = 0
 
 def btn2_pressed():
-    """BTN2: 戻る"""
-    global state, library_path, library_cursor, library_scroll, queue_cursor, queue_scroll, start
-    
+    """BTN2: ライブラリへ移動"""
+    global state, library_path, library_cursor, library_scroll, queue_moving_from, start
+
     if not debounce(BTN2_PIN):
         return
-    
+
     start = time.time()
-    
+
     # スクリーンセーバーから復帰
     if state == STATE_OFF:
         state = STATE_PLAYING
         return
-    
-    if state == STATE_QUEUE_MENU:
-        state = STATE_QUEUE
-    elif state == STATE_LIBRARY:
-        if library_path:
-            library_path.pop()
-            library_cursor = 0
-            library_scroll = 0
-        else:
-            state = STATE_MAIN_MENU
-    elif state == STATE_SYSTEM:
-        state = STATE_MAIN_MENU
-    else:
-        pass
+
+    # 移動モード中の場合は解除
+    if queue_moving_from >= 0:
+        queue_moving_from = -1
+
+    # ライブラリに移動
+    state = STATE_LIBRARY
+    library_path = []
+    library_cursor = 0
+    library_scroll = 0
 
 def btn3_pressed():
     """BTN3: メインメニュー"""
-    global state, menu_cursor, start
-    
+    global state, menu_cursor, queue_moving_from, start
+
     if not debounce(BTN3_PIN):
         return
-    
+
     start = time.time()
-    
+
     # スクリーンセーバーから復帰
     if state == STATE_OFF:
         state = STATE_PLAYING
         return
-    
+
+    # 移動モード中の場合は解除
+    if queue_moving_from >= 0:
+        queue_moving_from = -1
+
     state = STATE_MAIN_MENU
     menu_cursor = 0
 
@@ -671,7 +682,7 @@ def joystick_right():
 
 def joystick_pressed():
     """ジョイスティック押し込み（決定）"""
-    global state, menu_cursor, library_cursor, library_path, library_scroll, queue_cursor, queue_menu_cursor, start
+    global state, menu_cursor, library_cursor, library_path, library_scroll, queue_cursor, queue_menu_cursor, queue_moving_from, start
 
     if not debounce(JS_P_PIN):
         return
@@ -746,6 +757,18 @@ def joystick_pressed():
                 except:
                     pass
     elif state == STATE_QUEUE:
+        # 移動モード中の場合は、選択した位置に挿入
+        if queue_moving_from >= 0:
+            if queue_cursor >= 0:
+                try:
+                    connect_mpd()
+                    # queue_moving_fromからqueue_cursorの上に移動
+                    mpd_client.move(queue_moving_from, queue_cursor)
+                    queue_moving_from = -1
+                except:
+                    queue_moving_from = -1
+            return
+
         # リピート/シャッフル切り替え
         if queue_cursor == -2:
             # リピート切り替え
@@ -784,7 +807,8 @@ def joystick_pressed():
             queue_menu_cursor = 0
     elif state == STATE_QUEUE_MENU:
         if queue_menu_cursor == 0:
-            # 移動（実装は複雑なので省略）
+            # 移動モード開始
+            queue_moving_from = queue_cursor
             state = STATE_QUEUE
         elif queue_menu_cursor == 1:
             # 今すぐ再生
