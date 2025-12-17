@@ -45,16 +45,12 @@ STATE_QUEUE_MOVING = 7
 mpd_client = MPDClient()
 mpd_connected = False
 
-# MPD接続設定（Unixソケットを優先、フォールバックでTCP/IP）
-MPD_SOCKET_PATHS = [
-    "/run/mpd/socket",
-    "/var/run/mpd/socket",
-    os.path.expanduser("~/.mpd/socket")
-]
+# MPD接続設定
 MPD_HOST = "localhost"
 MPD_PORT = 6600
 
 def connect_mpd():
+    """MPDに接続（接続確認と自動再接続）"""
     global mpd_client, mpd_connected
     try:
         if mpd_connected:
@@ -72,19 +68,8 @@ def connect_mpd():
         except:
             pass
 
+        # 新しいクライアントで接続
         mpd_client = MPDClient()
-
-        # Unixソケット接続を試行
-        for socket_path in MPD_SOCKET_PATHS:
-            if os.path.exists(socket_path):
-                try:
-                    mpd_client.connect(socket_path)
-                    mpd_connected = True
-                    return
-                except:
-                    pass
-
-        # TCP/IP接続にフォールバック
         mpd_client.connect(MPD_HOST, MPD_PORT)
         mpd_connected = True
 
@@ -508,6 +493,10 @@ def draw_queue_menu(draw):
 def draw_screen():
     """画面を描画"""
     global state, start
+
+    # 画面描画前に接続確認（スクリーンセーバー以外）
+    if state != STATE_OFF:
+        connect_mpd()
 
     with canvas(device) as draw:
         if state == STATE_OFF:
