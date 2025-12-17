@@ -16,8 +16,8 @@ pip3 install --break-system-packages luma.oled luma.core gpiozero pillow python-
 # スクリプトの配置
 echo ""
 echo "Installing MPD client script..."
-sudo cp mpd_client.py /usr/local/bin/
-sudo chmod +x /usr/local/bin/mpd_client.py
+sudo cp mpd_client_fixed.py /usr/local/bin/
+sudo chmod +x /usr/local/bin/mpd_client_fixed.py
 
 # systemdサービスの設定
 echo ""
