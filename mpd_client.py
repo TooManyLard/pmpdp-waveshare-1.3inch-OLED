@@ -83,6 +83,10 @@ last_press_time = {}
 DEBOUNCE_TIME = 0.2
 need_redraw = True  # 画面再描画フラグ
 
+# 再生中画面用変数
+last_song_id = None  # 前回の曲ID
+last_playing_image = None  # 前回の再生中画面イメージ
+
 # メニュー用変数
 menu_cursor = 0
 menu_items = []
@@ -133,34 +137,51 @@ def calc_text_width(text):
 
 def draw_playing_screen(draw):
     """再生中画面を描画"""
+    global last_song_id, last_playing_image
+
     try:
         connect_mpd()
         status = mpd_client.status()
         current = mpd_client.currentsong()
 
         # 曲情報取得
-        title = current.get('title', 'Unknown')
-        artist = current.get('artist', 'Unknown Artist')
-        album = current.get('album', 'Unknown Album')
-        track = current.get('track', '')
+        current_song_id = current.get('id', None)
+        is_playing = status.get('state') == 'play'
 
-        # タイトル行（8pxフォント、スクロールなし）
-        y_pos = 0
-        draw.text((0, y_pos), title, font=font, fill=255)
+        # トラックが変更されたかチェック
+        song_changed = (current_song_id != last_song_id)
 
-        # アルバム名 - トラック番号（8px空けて16pxから開始）
-        y_pos = 16
-        album_track = album
-        if track:
-            album_track += f" - {track}"
-        draw.text((0, y_pos), album_track, font=font, fill=255)
+        # 曲が変わった場合、または再生中でない場合は全体を描画
+        if song_changed or not is_playing or last_playing_image is None:
+            last_song_id = current_song_id
 
-        # アーティスト名（更に8px下にシフト）
-        y_pos = 24
-        draw.text((0, y_pos), artist, font=font, fill=255)
+            # 曲情報取得
+            title = current.get('title', 'Unknown')
+            artist = current.get('artist', 'Unknown Artist')
+            album = current.get('album', 'Unknown Album')
+            track = current.get('track', '')
+
+            # タイトル行（8pxフォント、スクロールなし）
+            y_pos = 0
+            draw.text((0, y_pos), title, font=font, fill=255)
+
+            # アルバム名 - トラック番号（8px空けて16pxから開始）
+            y_pos = 16
+            album_track = album
+            if track:
+                album_track += f" - {track}"
+            draw.text((0, y_pos), album_track, font=font, fill=255)
+
+            # アーティスト名（更に8px下にシフト）
+            y_pos = 24
+            draw.text((0, y_pos), artist, font=font, fill=255)
+        else:
+            # 曲が同じ場合、上部40pxは前回のイメージから復元
+            if last_playing_image:
+                draw._image.paste(last_playing_image.crop((0, 0, 128, 40)), (0, 0))
 
         # 16px空ける
-        y_pos += 16
+        y_pos = 40
 
         # 再生進捗とトラックの長さ
         elapsed = float(status.get('elapsed', 0))
@@ -198,9 +219,14 @@ def draw_playing_screen(draw):
         # 右に時刻（右寄せ：128 - 24 = 104pxから開始、HH:MMは5文字=20px）
         draw.text((104, y_pos), local_time, font=font, fill=255)
 
+        # 現在の画面イメージを保存（次回の部分更新用）
+        last_playing_image = draw._image.copy()
+
     except Exception as e:
         draw.text((0, 0), "MPD接続エラー", font=font, fill=255)
         draw.text((0, 8), str(e), font=font, fill=255)
+        last_song_id = None
+        last_playing_image = None
 
 def draw_queue_screen(draw):
     """再生キュー画面を描画"""
@@ -468,7 +494,7 @@ def draw_screen():
 # ボタンハンドラ
 def btn1_pressed():
     """BTN1: 再生中画面・再生キュー切り替え"""
-    global state, menu_cursor, queue_cursor, queue_moving_from, start, need_redraw
+    global state, menu_cursor, queue_cursor, queue_moving_from, start, need_redraw, last_song_id, last_playing_image
 
     if not debounce(BTN1_PIN):
         return
@@ -488,6 +514,9 @@ def btn1_pressed():
     if state == STATE_PLAYING:
         state = STATE_QUEUE
         queue_cursor = -2  # カーソルをリピート行に初期化
+        # 再生中画面を離れるのでキャッシュをクリア
+        last_song_id = None
+        last_playing_image = None
     elif state == STATE_QUEUE:
         state = STATE_PLAYING
     else:
@@ -496,7 +525,7 @@ def btn1_pressed():
 
 def btn2_pressed():
     """BTN2: ライブラリへ移動"""
-    global state, library_path, library_cursor, library_scroll, queue_moving_from, start, need_redraw
+    global state, library_path, library_cursor, library_scroll, queue_moving_from, start, need_redraw, last_song_id, last_playing_image
 
     if not debounce(BTN2_PIN):
         return
@@ -513,6 +542,11 @@ def btn2_pressed():
     if queue_moving_from >= 0:
         queue_moving_from = -1
 
+    # 再生中画面を離れる場合はキャッシュをクリア
+    if state == STATE_PLAYING:
+        last_song_id = None
+        last_playing_image = None
+
     # ライブラリに移動
     state = STATE_LIBRARY
     library_path = []
@@ -521,7 +555,7 @@ def btn2_pressed():
 
 def btn3_pressed():
     """BTN3: メインメニュー"""
-    global state, menu_cursor, queue_moving_from, start, need_redraw
+    global state, menu_cursor, queue_moving_from, start, need_redraw, last_song_id, last_playing_image
 
     if not debounce(BTN3_PIN):
         return
@@ -537,6 +571,11 @@ def btn3_pressed():
     # 移動モード中の場合は解除
     if queue_moving_from >= 0:
         queue_moving_from = -1
+
+    # 再生中画面を離れる場合はキャッシュをクリア
+    if state == STATE_PLAYING:
+        last_song_id = None
+        last_playing_image = None
 
     state = STATE_MAIN_MENU
     menu_cursor = 0
