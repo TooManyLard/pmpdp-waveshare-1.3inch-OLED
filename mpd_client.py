@@ -81,6 +81,7 @@ state = STATE_OFF
 start = time.time()
 last_press_time = {}
 DEBOUNCE_TIME = 0.2
+need_redraw = True  # 画面再描画フラグ
 
 # メニュー用変数
 menu_cursor = 0
@@ -467,12 +468,13 @@ def draw_screen():
 # ボタンハンドラ
 def btn1_pressed():
     """BTN1: 再生中画面・再生キュー切り替え"""
-    global state, menu_cursor, queue_cursor, queue_moving_from, start
+    global state, menu_cursor, queue_cursor, queue_moving_from, start, need_redraw
 
     if not debounce(BTN1_PIN):
         return
 
     start = time.time()
+    need_redraw = True
 
     # スクリーンセーバーから復帰
     if state == STATE_OFF:
@@ -494,12 +496,13 @@ def btn1_pressed():
 
 def btn2_pressed():
     """BTN2: ライブラリへ移動"""
-    global state, library_path, library_cursor, library_scroll, queue_moving_from, start
+    global state, library_path, library_cursor, library_scroll, queue_moving_from, start, need_redraw
 
     if not debounce(BTN2_PIN):
         return
 
     start = time.time()
+    need_redraw = True
 
     # スクリーンセーバーから復帰
     if state == STATE_OFF:
@@ -518,12 +521,13 @@ def btn2_pressed():
 
 def btn3_pressed():
     """BTN3: メインメニュー"""
-    global state, menu_cursor, queue_moving_from, start
+    global state, menu_cursor, queue_moving_from, start, need_redraw
 
     if not debounce(BTN3_PIN):
         return
 
     start = time.time()
+    need_redraw = True
 
     # スクリーンセーバーから復帰
     if state == STATE_OFF:
@@ -539,12 +543,13 @@ def btn3_pressed():
 
 def joystick_up():
     """ジョイスティック上"""
-    global state, menu_cursor, library_cursor, queue_cursor, queue_menu_cursor, start
+    global state, menu_cursor, library_cursor, queue_cursor, queue_menu_cursor, start, need_redraw
 
     if not debounce(JS_U_PIN):
         return
 
     start = time.time()
+    need_redraw = True
 
     # スクリーンセーバーから復帰（ボリューム上げ）
     if state == STATE_OFF:
@@ -582,12 +587,13 @@ def joystick_up():
 
 def joystick_down():
     """ジョイスティック下"""
-    global state, menu_cursor, library_cursor, queue_cursor, queue_menu_cursor, start
+    global state, menu_cursor, library_cursor, queue_cursor, queue_menu_cursor, start, need_redraw
 
     if not debounce(JS_D_PIN):
         return
 
     start = time.time()
+    need_redraw = True
 
     # スクリーンセーバーから復帰（ボリューム下げ）
     if state == STATE_OFF:
@@ -628,12 +634,13 @@ def joystick_down():
 
 def joystick_left():
     """ジョイスティック左"""
-    global state, start
+    global state, start, need_redraw
 
     if not debounce(JS_L_PIN):
         return
 
     start = time.time()
+    need_redraw = True
 
     # スクリーンセーバーから復帰（前の曲）
     if state == STATE_OFF:
@@ -655,12 +662,13 @@ def joystick_left():
 
 def joystick_right():
     """ジョイスティック右"""
-    global state, start
+    global state, start, need_redraw
 
     if not debounce(JS_R_PIN):
         return
 
     start = time.time()
+    need_redraw = True
 
     # スクリーンセーバーから復帰（次の曲）
     if state == STATE_OFF:
@@ -682,12 +690,13 @@ def joystick_right():
 
 def joystick_pressed():
     """ジョイスティック押し込み（決定）"""
-    global state, menu_cursor, library_cursor, library_path, library_scroll, queue_cursor, queue_menu_cursor, queue_moving_from, start
+    global state, menu_cursor, library_cursor, library_path, library_scroll, queue_cursor, queue_menu_cursor, queue_moving_from, start, need_redraw
 
     if not debounce(JS_P_PIN):
         return
 
     start = time.time()
+    need_redraw = True
 
     # スクリーンセーバーから復帰（再生/一時停止）
     if state == STATE_OFF:
@@ -858,6 +867,7 @@ js_press.when_pressed = joystick_pressed
 try:
     connect_mpd()
     state = STATE_PLAYING
+    last_update_time = time.time()
 
     while True:
         current_time = time.time()
@@ -865,11 +875,28 @@ try:
         # スクリーンセーバー
         if state != STATE_OFF and (current_time - start) > SCREEN_SAVER:
             state = STATE_OFF
+            need_redraw = True
 
-        draw_screen()
+        # 画面更新の条件判定
+        should_update = False
 
-        # 更新頻度の最適化：全画面1秒に1回
-        time.sleep(1.0)
+        # 再生中画面は1秒ごとに自動更新
+        if state == STATE_PLAYING and (current_time - last_update_time) >= 1.0:
+            should_update = True
+            last_update_time = current_time
+
+        # 操作があった場合は即座に更新
+        if need_redraw:
+            should_update = True
+            need_redraw = False
+            last_update_time = current_time
+
+        # 画面更新
+        if should_update:
+            draw_screen()
+
+        # 短いスリープで次のイベントをチェック
+        time.sleep(0.05)
 
 except KeyboardInterrupt:
     print("\nStopped by user")
