@@ -161,7 +161,7 @@ def draw_playing_screen(draw):
         # 16px空ける
         y_pos += 16
 
-        # 再生進捗とトラックの長さ（4px空けて）
+        # 再生進捗とトラックの長さ
         elapsed = float(status.get('elapsed', 0))
         duration = float(current.get('duration', 0))
 
@@ -173,8 +173,8 @@ def draw_playing_screen(draw):
         # 右端にトラックの長さ（108pxから開始、5文字 = 40px）
         draw.text((108, y_pos), duration_str, font=font, fill=255)
 
-        # 4px空けて進捗バー
-        y_pos += 12
+        # すぐ下に進捗バー
+        y_pos += 8
         bar_width = 128
         bar_height = 3
 
@@ -188,14 +188,14 @@ def draw_playing_screen(draw):
         volume = status.get('volume', '0')
         vol_text = f"Vol:{volume}%"
 
-        # 現在時刻取得
+        # 現在時刻取得（HH:MM形式）
         import datetime
-        local_time = datetime.datetime.now().strftime("%H:%M:%S")
+        local_time = datetime.datetime.now().strftime("%H:%M")
 
         # 左にボリューム
         draw.text((0, y_pos), vol_text, font=font, fill=255)
-        # 右に時刻（右寄せ：128 - 32 = 96pxから開始）
-        draw.text((96, y_pos), local_time, font=font, fill=255)
+        # 右に時刻（右寄せ：128 - 24 = 104pxから開始、HH:MMは5文字=20px）
+        draw.text((104, y_pos), local_time, font=font, fill=255)
 
     except Exception as e:
         draw.text((0, 0), "MPD接続エラー", font=font, fill=255)
@@ -858,16 +858,18 @@ js_press.when_pressed = joystick_pressed
 try:
     connect_mpd()
     state = STATE_PLAYING
-    
+
     while True:
         current_time = time.time()
-        
+
         # スクリーンセーバー
         if state != STATE_OFF and (current_time - start) > SCREEN_SAVER:
             state = STATE_OFF
-        
+
         draw_screen()
-        time.sleep(0.1)  # 10FPSで更新
+
+        # 更新頻度の最適化：全画面1秒に1回
+        time.sleep(1.0)
 
 except KeyboardInterrupt:
     print("\nStopped by user")
