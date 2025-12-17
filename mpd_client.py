@@ -81,11 +81,6 @@ start = time.time()
 last_press_time = {}
 DEBOUNCE_TIME = 0.2
 
-# 再生画面用変数
-scroll_offset = 0
-scroll_direction = 1
-last_song = None
-
 # メニュー用変数
 menu_cursor = 0
 menu_items = []
@@ -135,8 +130,6 @@ def calc_text_width(text):
 
 def draw_playing_screen(draw):
     """再生中画面を描画"""
-    global scroll_offset, scroll_direction, last_song
-
     try:
         connect_mpd()
         status = mpd_client.status()
@@ -148,36 +141,11 @@ def draw_playing_screen(draw):
         album = current.get('album', 'Unknown Album')
         track = current.get('track', '')
 
-        # 曲が変わったらスクロールリセット
-        if current != last_song:
-            scroll_offset = 0
-            scroll_direction = 1
-            last_song = current.copy()
-
-        # タイトル行（16pxフォント）
+        # タイトル行（8pxフォント、スクロールなし）
         y_pos = 0
-        # 実際のフォント幅を取得
-        bbox = font_16.getbbox(title)
-        title_width = bbox[2] - bbox[0]
+        draw.text((0, y_pos), title, font=font, fill=255)
 
-        if title_width > 128 and status['state'] == 'play':
-            # バウンススクロール（実際の文字幅ベース）
-            max_scroll = title_width - 128
-            if scroll_offset >= max_scroll:
-                scroll_direction = -1
-            elif scroll_offset <= 0:
-                scroll_direction = 1
-            scroll_offset += scroll_direction * 2
-
-            # スクロール表示
-            img = Image.new('1', (title_width, 16))
-            draw_temp = ImageDraw.Draw(img)
-            draw_temp.text((0, 0), title, font=font_16, fill=255)
-            draw.bitmap((0 - scroll_offset, y_pos), img)
-        else:
-            draw.text((0, y_pos), title, font=font_16, fill=255)
-
-        # アルバム名 - トラック番号（8px下にシフト）
+        # アルバム名 - トラック番号（8px空けて16pxから開始）
         y_pos = 16
         album_track = album
         if track:
