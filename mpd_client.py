@@ -896,7 +896,7 @@ try:
             draw_screen()
 
         # 短いスリープで次のイベントをチェック
-        time.sleep(0.5)
+        time.sleep(0.1)
 
 except KeyboardInterrupt:
     print("\nStopped by user")
