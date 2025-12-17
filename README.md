@@ -36,8 +36,8 @@ sudo systemctl restart mpd
 
 1. スクリプトを配置:
 ```bash
-sudo cp mpd_client_fixed.py /usr/local/bin/
-sudo chmod +x /usr/local/bin/mpd_client_fixed.py
+sudo cp mpd_client.py /usr/local/bin/
+sudo chmod +x /usr/local/bin/mpd_client.py
 ```
 
 2. systemdサービスを設定:
