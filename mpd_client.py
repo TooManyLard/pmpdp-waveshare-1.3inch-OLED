@@ -27,7 +27,7 @@ BTN2_PIN = 20
 BTN3_PIN = 16
 
 # 定数
-SCREEN_SAVER = 10.0  # 10sでスクリーンセーバー
+SCREEN_SAVER = 5.0  # 5sでスクリーンセーバー
 width = 128
 height = 64
 
