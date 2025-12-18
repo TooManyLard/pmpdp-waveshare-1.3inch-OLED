@@ -160,7 +160,7 @@ def calc_text_width(text):
 
 def draw_playing_screen(draw):
     """再生中画面を描画"""
-    global last_song_id, last_playing_image
+    global last_song_id, last_playing_image, mpd_connected
 
     try:
         connect_mpd()
@@ -246,6 +246,7 @@ def draw_playing_screen(draw):
         last_playing_image = draw._image.copy()
 
     except Exception as e:
+        mpd_connected = False  # 接続リセット（次回再接続）
         draw.text((0, 0), "MPD接続エラー", font=font, fill=255)
         draw.text((0, 8), str(e), font=font, fill=255)
         last_song_id = None
@@ -253,15 +254,15 @@ def draw_playing_screen(draw):
 
 def draw_queue_screen(draw):
     """再生キュー画面を描画"""
-    global queue_items, queue_cursor, queue_scroll, queue_moving_from
-    
+    global queue_items, queue_cursor, queue_scroll, queue_moving_from, mpd_connected
+
     try:
         connect_mpd()
         status = mpd_client.status()
         playlist = mpd_client.playlistinfo()
-        
+
         queue_items = playlist
-        
+
         # ヘッダー行1: リピート設定
         y_pos = 0
         repeat_mode = "オフ"
@@ -271,7 +272,7 @@ def draw_queue_screen(draw):
             else:
                 repeat_mode = "全体"
         repeat_text = f"リピート[{repeat_mode}]"
-        
+
         # カーソルが-2の場合（リピート行）
         if queue_cursor == -2:
             draw.rectangle((0, y_pos, 127, y_pos + 7), outline=255, fill=255)
@@ -279,10 +280,10 @@ def draw_queue_screen(draw):
         else:
             draw.text((0, y_pos), repeat_text, font=font, fill=255)
         y_pos += 8
-        
+
         # ヘッダー行2: シャッフル設定
         shuffle_text = "シャッフル[ON]" if status.get('random', '0') == '1' else "シャッフル[OFF]"
-        
+
         # カーソルが-1の場合（シャッフル行）
         if queue_cursor == -1:
             draw.rectangle((0, y_pos, 127, y_pos + 7), outline=255, fill=255)
@@ -290,11 +291,11 @@ def draw_queue_screen(draw):
         else:
             draw.text((0, y_pos), shuffle_text, font=font, fill=255)
         y_pos += 8
-        
+
         # キュー表示
         current_song_id = status.get('songid', '')
         visible_lines = 5  # ヘッダー2行分減らす
-        
+
         if len(queue_items) > 0:
             # スクロール調整（カーソルが0以上の場合のみ）
             if queue_cursor >= 0:
@@ -302,12 +303,12 @@ def draw_queue_screen(draw):
                     queue_scroll = queue_cursor
                 if queue_cursor >= queue_scroll + visible_lines:
                     queue_scroll = queue_cursor - visible_lines + 1
-            
+
             for i in range(visible_lines):
                 idx = queue_scroll + i
                 if idx >= len(queue_items):
                     break
-                
+
                 item = queue_items[idx]
                 title = item.get('title', 'Unknown')
 
@@ -326,21 +327,22 @@ def draw_queue_screen(draw):
                     draw.text((0, y_pos), line_text, font=font, fill=0)
                 else:
                     draw.text((0, y_pos), line_text, font=font, fill=255)
-                
+
                 y_pos += 8
-            
+
             # スクロールバー
             if len(queue_items) > visible_lines:
                 bar_height = 40  # ヘッダー2行分減らす
                 thumb_height = max(3, int((visible_lines / len(queue_items)) * bar_height))
                 thumb_pos = int((queue_scroll / (len(queue_items) - visible_lines)) * (bar_height - thumb_height))
-                
+
                 draw.rectangle((125, 16, 127, 56), outline=255, fill=0)
                 draw.rectangle((125, 16 + thumb_pos, 127, 16 + thumb_pos + thumb_height), outline=255, fill=255)
         else:
             draw.text((0, y_pos), "キューは空です", font=font, fill=255)
-    
+
     except Exception as e:
+        mpd_connected = False  # 接続リセット（次回再接続）
         draw.text((0, 0), "MPD接続エラー", font=font, fill=255)
 
 def draw_main_menu(draw):
@@ -360,60 +362,60 @@ def draw_main_menu(draw):
 
 def draw_library_screen(draw):
     """ライブラリ画面を描画"""
-    global library_items, library_cursor, library_scroll
-    
+    global library_items, library_cursor, library_scroll, mpd_connected
+
     try:
         connect_mpd()
-        
+
         # パス表示
         y_pos = 0
         path_text = "[ライブラリ]/" + "/".join(library_path) if library_path else "[ライブラリ]/"
         draw.text((0, y_pos), path_text, font=font, fill=255)
         y_pos += 8
-        
+
         # アイテム取得
         current_path = "/".join(library_path) if library_path else ""
         items = mpd_client.lsinfo(current_path)
-        
+
         library_items = []
-        
+
         # 親ディレクトリへ戻る項目
         if library_path:
             library_items.append({"type": "parent", "name": ".."})
-        
+
         # ディレクトリ
         for item in items:
             if 'directory' in item:
                 library_items.append({"type": "directory", "name": os.path.basename(item['directory']), "path": item['directory']})
-        
+
         # プレイリスト
         for item in items:
             if 'playlist' in item:
                 library_items.append({"type": "playlist", "name": item['playlist'], "path": item['playlist']})
-        
+
         # ファイル
         for item in items:
             if 'file' in item:
                 title = item.get('title', os.path.basename(item['file']))
                 library_items.append({"type": "file", "name": title, "path": item['file']})
-        
+
         # リスト表示
         visible_lines = 6
-        
+
         if len(library_items) > 0:
             # スクロール調整
             if library_cursor < library_scroll:
                 library_scroll = library_cursor
             if library_cursor >= library_scroll + visible_lines:
                 library_scroll = library_cursor - visible_lines + 1
-            
+
             for i in range(visible_lines):
                 idx = library_scroll + i
                 if idx >= len(library_items):
                     break
-                
+
                 item = library_items[idx]
-                
+
                 # アイコン
                 icon = ""
                 if item['type'] == 'directory' or item['type'] == 'parent':
@@ -422,30 +424,31 @@ def draw_library_screen(draw):
                     icon = "# "
                 elif item['type'] == 'file':
                     icon = "@ "
-                
+
                 line_text = icon + item['name']
-                
+
                 # カーソル位置は反転表示
                 if idx == library_cursor:
                     draw.rectangle((0, y_pos, 124, y_pos + 7), outline=255, fill=255)
                     draw.text((0, y_pos), line_text, font=font, fill=0)
                 else:
                     draw.text((0, y_pos), line_text, font=font, fill=255)
-                
+
                 y_pos += 8
-            
+
             # スクロールバー
             if len(library_items) > visible_lines:
                 bar_height = 48
                 thumb_height = max(3, int((visible_lines / len(library_items)) * bar_height))
                 thumb_pos = int((library_scroll / (len(library_items) - visible_lines)) * (bar_height - thumb_height))
-                
+
                 draw.rectangle((125, 8, 127, 56), outline=255, fill=0)
                 draw.rectangle((125, 8 + thumb_pos, 127, 8 + thumb_pos + thumb_height), outline=255, fill=255)
         else:
             draw.text((0, y_pos), "項目がありません", font=font, fill=255)
-    
+
     except Exception as e:
+        mpd_connected = False  # 接続リセット（次回再接続）
         draw.text((0, 0), "MPD接続エラー", font=font, fill=255)
         draw.text((0, 8), str(e), font=font, fill=255)
 
