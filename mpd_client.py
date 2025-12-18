@@ -348,9 +348,9 @@ def draw_queue_screen(draw):
 def draw_main_menu(draw):
     """メインメニューを描画"""
     global menu_cursor, menu_items
-    
-    menu_items = ["再生中", "再生キュー", "ライブラリ", "システム"]
-    
+
+    menu_items = ["再生中", "再生キュー", "ライブラリ", "ライブラリ再読込", "システム"]
+
     y_pos = 8
     for i, item in enumerate(menu_items):
         if i == menu_cursor:
@@ -687,7 +687,7 @@ def joystick_down():
             pass
     elif state == STATE_MAIN_MENU or state == STATE_SYSTEM:
         # メニュー項目数を動的に取得
-        max_items = 4 if state == STATE_MAIN_MENU else 2
+        max_items = 5 if state == STATE_MAIN_MENU else 2
         if menu_cursor < max_items - 1:
             menu_cursor += 1
     elif state == STATE_LIBRARY:
@@ -803,6 +803,14 @@ def joystick_pressed():
             library_path = []
             library_cursor = 0
         elif menu_cursor == 3:
+            # ライブラリ再読み込み
+            try:
+                connect_mpd()
+                mpd_client.update()
+                state = STATE_PLAYING
+            except:
+                pass
+        elif menu_cursor == 4:
             state = STATE_SYSTEM
             menu_cursor = 0
     elif state == STATE_LIBRARY:
