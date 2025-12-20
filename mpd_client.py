@@ -627,7 +627,7 @@ def joystick_up():
             connect_mpd()
             status = mpd_client.status()
             volume = int(status.get('volume', 50))
-            mpd_client.setvol(min(100, volume + 5))
+            mpd_client.setvol(min(100, volume + 1))
         except:
             pass
         return
@@ -638,7 +638,7 @@ def joystick_up():
             connect_mpd()
             status = mpd_client.status()
             volume = int(status.get('volume', 50))
-            mpd_client.setvol(min(100, volume + 5))
+            mpd_client.setvol(min(100, volume + 1))
         except:
             pass
     elif state == STATE_MAIN_MENU or state == STATE_SYSTEM:
@@ -671,7 +671,7 @@ def joystick_down():
             connect_mpd()
             status = mpd_client.status()
             volume = int(status.get('volume', 50))
-            mpd_client.setvol(max(0, volume - 5))
+            mpd_client.setvol(max(0, volume - 1))
         except:
             pass
         return
@@ -682,7 +682,7 @@ def joystick_down():
             connect_mpd()
             status = mpd_client.status()
             volume = int(status.get('volume', 50))
-            mpd_client.setvol(max(0, volume - 5))
+            mpd_client.setvol(max(0, volume - 1))
         except:
             pass
     elif state == STATE_MAIN_MENU or state == STATE_SYSTEM:
