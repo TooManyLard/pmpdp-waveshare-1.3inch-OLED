@@ -965,7 +965,7 @@ def handle_joystick_repeat():
                         connect_mpd()
                         status = mpd_client.status()
                         volume = int(status.get('volume', 50))
-                        mpd_client.setvol(min(100, volume + 5))
+                        mpd_client.setvol(min(100, volume + 1))
                         need_redraw = True
                     except:
                         pass
@@ -1002,7 +1002,7 @@ def handle_joystick_repeat():
                         connect_mpd()
                         status = mpd_client.status()
                         volume = int(status.get('volume', 50))
-                        mpd_client.setvol(max(0, volume - 5))
+                        mpd_client.setvol(max(0, volume - 1))
                         need_redraw = True
                     except:
                         pass
