@@ -106,6 +106,12 @@ last_press_time = {}
 DEBOUNCE_TIME = 0.2
 need_redraw = True  # 画面再描画フラグ
 
+# ジョイスティックリピート用変数
+JS_REPEAT_DELAY = 0.5  # 最初のリピートまでの遅延（秒）
+JS_REPEAT_INTERVAL = 0.1  # リピート間隔（秒）
+js_press_start = {'up': None, 'down': None, 'left': None, 'right': None}
+js_last_repeat = {'up': None, 'down': None, 'left': None, 'right': None}
+
 # 再生中画面用変数
 last_song_id = None  # 前回の曲ID
 last_playing_image = None  # 前回の再生中画面イメージ
@@ -940,6 +946,89 @@ js_up.when_pressed = joystick_up
 js_down.when_pressed = joystick_down
 js_press.when_pressed = joystick_pressed
 
+def handle_joystick_repeat():
+    """ジョイスティックのリピート処理（0.5秒後から0.1秒ごと）"""
+    global state, menu_cursor, library_cursor, queue_cursor, queue_menu_cursor, need_redraw
+    global js_press_start, js_last_repeat
+
+    current_time = time.time()
+
+    # 上方向
+    if js_up.is_pressed:
+        if js_press_start['up'] is None:
+            js_press_start['up'] = current_time
+        elif current_time - js_press_start['up'] >= JS_REPEAT_DELAY:
+            if js_last_repeat['up'] is None or current_time - js_last_repeat['up'] >= JS_REPEAT_INTERVAL:
+                # リピートアクション実行
+                if state == STATE_PLAYING:
+                    try:
+                        connect_mpd()
+                        status = mpd_client.status()
+                        volume = int(status.get('volume', 50))
+                        mpd_client.setvol(min(100, volume + 5))
+                        need_redraw = True
+                    except:
+                        pass
+                elif state == STATE_MAIN_MENU or state == STATE_SYSTEM:
+                    if menu_cursor > 0:
+                        menu_cursor -= 1
+                        need_redraw = True
+                elif state == STATE_LIBRARY:
+                    if library_cursor > 0:
+                        library_cursor -= 1
+                        need_redraw = True
+                elif state == STATE_QUEUE:
+                    if queue_cursor > -2:
+                        queue_cursor -= 1
+                        need_redraw = True
+                elif state == STATE_QUEUE_MENU:
+                    if queue_menu_cursor > 0:
+                        queue_menu_cursor -= 1
+                        need_redraw = True
+                js_last_repeat['up'] = current_time
+    else:
+        js_press_start['up'] = None
+        js_last_repeat['up'] = None
+
+    # 下方向
+    if js_down.is_pressed:
+        if js_press_start['down'] is None:
+            js_press_start['down'] = current_time
+        elif current_time - js_press_start['down'] >= JS_REPEAT_DELAY:
+            if js_last_repeat['down'] is None or current_time - js_last_repeat['down'] >= JS_REPEAT_INTERVAL:
+                # リピートアクション実行
+                if state == STATE_PLAYING:
+                    try:
+                        connect_mpd()
+                        status = mpd_client.status()
+                        volume = int(status.get('volume', 50))
+                        mpd_client.setvol(max(0, volume - 5))
+                        need_redraw = True
+                    except:
+                        pass
+                elif state == STATE_MAIN_MENU or state == STATE_SYSTEM:
+                    max_items = 5 if state == STATE_MAIN_MENU else 2
+                    if menu_cursor < max_items - 1:
+                        menu_cursor += 1
+                        need_redraw = True
+                elif state == STATE_LIBRARY:
+                    if library_cursor < len(library_items) - 1:
+                        library_cursor += 1
+                        need_redraw = True
+                elif state == STATE_QUEUE:
+                    max_cursor = len(queue_items) - 1
+                    if queue_cursor < max_cursor:
+                        queue_cursor += 1
+                        need_redraw = True
+                elif state == STATE_QUEUE_MENU:
+                    if queue_menu_cursor < 2:
+                        queue_menu_cursor += 1
+                        need_redraw = True
+                js_last_repeat['down'] = current_time
+    else:
+        js_press_start['down'] = None
+        js_last_repeat['down'] = None
+
 # メインループ
 try:
     connect_mpd()
@@ -948,6 +1037,10 @@ try:
 
     while True:
         current_time = time.time()
+
+        # ジョイスティックリピート処理
+        if state != STATE_OFF:
+            handle_joystick_repeat()
 
         # スクリーンセーバー
         if state != STATE_OFF and (current_time - start) > SCREEN_SAVER:
